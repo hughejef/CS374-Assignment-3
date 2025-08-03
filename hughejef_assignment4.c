@@ -1,5 +1,9 @@
-/* This script was adapted from the skeleton code provided for assignment 
-with modifications to it made to fit assignment requirements*/
+/* hughejef_assignment3.c
+ * Author: Jeffrey Hughes
+ * CS 374 Operating Systems, Summer 2025
+ * A small shell implementing prompt, built-ins, exec, redirection, and signals
+ * Based on provided skeleton and Assignment 3 instructions
+ */
 
 /**
  * A sample program for parsing a command line. If you find it useful,
@@ -11,10 +15,11 @@ with modifications to it made to fit assignment requirements*/
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h> // chdir, getenv
-#include <sys/wait.h> // waitpid, status macros
+#include <unistd.h>    // chdir, getenv
+#include <sys/wait.h>  // waitpid, status macros
 #include <sys/types.h> // pid_t
-#include <fcntl.h> // open, O_RDONLY, O_WRONLY, O_CREAT, O_TRUNC
+#include <fcntl.h>     // open, O_RDONLY, O_WRONLY, O_CREAT, O_TRUNC
+#include <signal.h>    // sigaction
 
 #define INPUT_LENGTH 2048
 #define MAX_ARGS	 512
@@ -35,6 +40,17 @@ int status = 0;
 // Array of background PIDs
 pid_t bg_pids[MAX_BG_PROCS];
 int bg_count = 0;
+// Foreground-only mode flag for SIGSTP
+bool fg_mode = false;
+
+// SIGTSTP helper function
+void helper_sigtstp(int signo) {
+    char *msg = fg_mode ? 
+        "\nExiting foreground-only mode\n: " : 
+        "\nEntering foreground-only mode (& is now ignored)\n: ";
+    write(STDOUT_FILENO, msg, strlen(msg));
+    fg_mode = !fg_mode;
+}
 
 struct command_line *parse_input()
 {
@@ -81,6 +97,20 @@ struct command_line *parse_input()
 int main()
 {
 	struct command_line *curr_command;
+
+    //SIGINT
+    struct sigaction sa_int = {0};
+    sa_int.sa_handler = SIG_IGN;
+    sa_int.sa_flags = 0;
+    sigaction(SIGINT, &sa_int, NULL);
+
+    //SIGTSTP
+    struct sigaction sa_tstp = {0};
+    sa_tstp.sa_handler = helper_sigtstp;
+    sa_tstp.sa_flags = 0;
+    sigfillset(&sa_tstp.sa_mask);
+    sigaction(SIGTSTP, &sa_tstp, NULL);
+
 
 	while(true)
 	{
@@ -180,6 +210,7 @@ int main()
             } 
 			else {
                 // Any non-built-in command with & at the end run as background, shell doesn't wait
+                if (fg_mode) curr_command->is_bg = false;
                 if (curr_command->is_bg) {
                     // Print the process id of a background process when it begins
                     printf("background pid is %d\n", childPid);
@@ -195,21 +226,15 @@ int main()
                 // Set status to exit value if child exited normally and... 
                 if (WIFEXITED(childStatus)) {
                     status = WEXITSTATUS(childStatus);
-				// ... negative signal if terminated!
+				// ... negative signal if terminated
                 } else if (WIFSIGNALED(childStatus)) {
                     status = -WTERMSIG(childStatus);
                 }
             }
 		}
-        }
-		/* printf("Command: %s, Args: %d, Input: %s, Output: %s, Bg: %d\n",
-               curr_command->argv[0] ? curr_command->argv[0] : "none",
-               curr_command->argc,
-               curr_command->input_file ? curr_command->input_file : "none",
-               curr_command->output_file ? curr_command->output_file : "none",
-               curr_command->is_bg);
-		*/
+    }
 
+    // Free memory
 	for (int i = 0; i < curr_command->argc; i++) {
             free(curr_command->argv[i]);
         }
