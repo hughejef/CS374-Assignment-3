@@ -14,6 +14,7 @@ with modifications to it made to fit assignment requirements*/
 #include <unistd.h> // chdir, getenv
 #include <sys/wait.h> // waitpid, status macros
 #include <sys/types.h> // pid_t
+#include <fcntl.h> // open, O_RDONLY, O_WRONLY, O_CREAT, O_TRUNC
 
 #define INPUT_LENGTH 2048
 #define MAX_ARGS		 512
@@ -80,7 +81,7 @@ int main()
 	while(true)
 	{
 		curr_command = parse_input();
-		// exit if ctrl d
+		// reprompt if blank
 		if (curr_command == NULL) {
             continue;
         }
@@ -108,18 +109,45 @@ int main()
             fflush(stdout);
 		}
 		else {
-            // Whenever a non-built-in command is received, the parent (i.e., smallsh) will fork off a child
+            // Whenever a non-built-in command is received, the parent will fork
             pid_t childPid = fork();
             if (childPid == -1) {
                 // If fork fails, indicate error and set status to 1
                 perror("fork");
                 status = 1;
             } else if (childPid == 0) {
+                // Support input redirection - Section 5
+                // An input file redirected via stdin must be opened for reading only
+                if (curr_command->input_file != NULL) {
+                    int in_fd = open(curr_command->input_file, O_RDONLY);
+                    // If your shell cannot open the file for reading, it must print an error message and set the exit status to 1
+                    if (in_fd == -1) {
+                        printf("cannot open %s for input\n", curr_command->input_file);
+                        fflush(stdout);
+                        exit(1);
+                    }
+                    // The redirection must be done before using exec() to run the command
+                    dup2(in_fd, 0);  // Redirect stdin
+                    close(in_fd);  // Close the fd after dup2
+                }
+                // Handle output redirection (>)
+                // An output file redirected via stdout must be opened for writing only; it must be truncated if it already exists or created if it does not exist
+                if (curr_command->output_file != NULL) {
+                    int out_fd = open(curr_command->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    // If your shell cannot open the output file it must print an error message and set the exit status to 1
+                    if (out_fd == -1) {
+                        printf("cannot open %s for output\n", curr_command->output_file);
+                        fflush(stdout);
+                        exit(1);
+                    }
+                    dup2(out_fd, 1);  // Redirect stdout
+                    close(out_fd);  // Close the fd after dup2
+                }
+                // #### Both stdin and stdout for a command can be redirected at the same time ####
                 // The child will use a function from the exec() family to run the command
                 // Use execvp to search PATH for non-built-in commands and allow shell scripts
                 if (execvp(curr_command->argv[0], curr_command->argv) == -1) {
                     // If a command fails because it could not be found, print error and set status to 1
-                    // Note: exec() returns only if it fails
                     perror("execvp");
                     // A child process must terminate after running a command (successful or failed)
                     exit(1);
