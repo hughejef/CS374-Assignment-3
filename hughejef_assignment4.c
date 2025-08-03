@@ -137,12 +137,13 @@ int main()
                 }
             }
         }
-		printf("Command: %s, Args: %d, Input: %s, Output: %s, Bg: %d\n",
+		/* printf("Command: %s, Args: %d, Input: %s, Output: %s, Bg: %d\n",
                curr_command->argv[0] ? curr_command->argv[0] : "none",
                curr_command->argc,
                curr_command->input_file ? curr_command->input_file : "none",
                curr_command->output_file ? curr_command->output_file : "none",
                curr_command->is_bg);
+		*/
 
 	for (int i = 0; i < curr_command->argc; i++) {
             free(curr_command->argv[i]);
