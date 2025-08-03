@@ -11,6 +11,7 @@ with modifications to it made to fit assignment requirements*/
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h> // chdir and getenv
 
 #define INPUT_LENGTH 2048
 #define MAX_ARGS		 512
@@ -25,6 +26,8 @@ struct command_line
 	bool is_bg;
 };
 
+// status variable - positive for exit, negative for signal, initialized to 0
+int status = 0;
 
 struct command_line *parse_input()
 {
@@ -39,7 +42,7 @@ struct command_line *parse_input()
 		return NULL;
 	}
 
-	// Check if its a comment
+	// Check if input is a comment
     if (input[0] == '#') {
         free(curr_command);
         return NULL;
@@ -80,6 +83,34 @@ int main()
             continue;
         }
 
+		// Built in Commands
+		// exit
+		if (curr_command->argc > 0 && strcmp(curr_command->argv[0], "exit") == 0) {
+            exit(0);
+		}
+		// cd
+		else if (curr_command->argc > 0 && strcmp(curr_command->argv[0], "cd") == 0) {
+            char *path = (curr_command->argc > 1) ? curr_command->argv[1] : getenv("HOME");
+            if (chdir(path) != 0) {
+                printf("cd: no such directory\n");
+                fflush(stdout);
+			}
+		}
+		// status
+		else if (curr_command->argc > 0 && strcmp(curr_command->argv[0], "status") == 0) {
+            if (status >= 0) {
+                printf("exit value %d\n", status);
+            } else {
+                printf("terminated by signal %d\n", -status);  // Negative for signal
+            }
+            fflush(stdout);
+		}
+		else {
+            // ***** TODO
+            printf("TODO: %s (TODO)\n",
+                   curr_command->argv[0] ? curr_command->argv[0] : "none");
+            fflush(stdout);
+        }
 		printf("Command: %s, Args: %d, Input: %s, Output: %s, Bg: %d\n",
                curr_command->argv[0] ? curr_command->argv[0] : "none",
                curr_command->argc,
