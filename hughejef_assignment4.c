@@ -114,6 +114,25 @@ int main()
 
 	while(true)
 	{
+        // check for backround processes are finisheed
+        for (int i = 0; i < bg_count; i++) {
+            int childStatus;
+            pid_t pid = waitpid(bg_pids[i], &childStatus, WNOHANG);
+            if (pid > 0) {
+                // Print when background process ends
+                printf("background pid %d is done: ", pid);
+                if (WIFEXITED(childStatus)) {
+                    printf("exit value %d\n", WEXITSTATUS(childStatus));
+                } else if (WIFSIGNALED(childStatus)) {
+                    printf("terminated by signal %d\n", WTERMSIG(childStatus));
+                }
+                fflush(stdout);
+                // Remove PID from array
+                bg_pids[i] = bg_pids[bg_count - 1];
+                bg_count--;
+                i--;
+            }
+        }
 		curr_command = parse_input();
 		// reprompt if blank
 		if (curr_command == NULL) {
@@ -123,6 +142,10 @@ int main()
 		// Built in Commands
 		// exit
 		if (curr_command->argc > 0 && strcmp(curr_command->argv[0], "exit") == 0) {
+            for (int i = 0; i < bg_count; i++) {
+                //kill background processes
+                kill(bg_pids[i], SIGTERM);
+            }
             exit(0);
 		}
 		// cd
