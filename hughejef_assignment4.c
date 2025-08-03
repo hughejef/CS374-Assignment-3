@@ -78,9 +78,9 @@ int main()
 	while(true)
 	{
 		curr_command = parse_input();
-		// Any line that begins with the # character is a comment line and must be ignored.
+		// exit if ctrl d
 		if (curr_command == NULL) {
-            continue;
+            exit(0);
         }
 
 		// Built in Commands
