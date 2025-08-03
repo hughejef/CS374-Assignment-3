@@ -11,7 +11,9 @@ with modifications to it made to fit assignment requirements*/
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h> // chdir and getenv
+#include <unistd.h> // chdir, getenv
+#include <sys/wait.h> // waitpid, status macros
+#include <sys/types.h> // pid_t
 
 #define INPUT_LENGTH 2048
 #define MAX_ARGS		 512
@@ -39,7 +41,7 @@ struct command_line *parse_input()
 	fflush(stdout);
 	if (!fgets(input, INPUT_LENGTH, stdin)) {
 		free(curr_command);
-		return NULL;
+		exit(0);
 	}
 
 	// Check if input is a comment
@@ -80,7 +82,7 @@ int main()
 		curr_command = parse_input();
 		// exit if ctrl d
 		if (curr_command == NULL) {
-            exit(0);
+            continue;
         }
 
 		// Built in Commands
@@ -106,10 +108,34 @@ int main()
             fflush(stdout);
 		}
 		else {
-            // ***** TODO
-            printf("TODO: %s (TODO)\n",
-                   curr_command->argv[0] ? curr_command->argv[0] : "none");
-            fflush(stdout);
+            // Whenever a non-built-in command is received, the parent (i.e., smallsh) will fork off a child
+            pid_t childPid = fork();
+            if (childPid == -1) {
+                // If fork fails, indicate error and set status to 1
+                perror("fork");
+                status = 1;
+            } else if (childPid == 0) {
+                // The child will use a function from the exec() family to run the command
+                // Use execvp to search PATH for non-built-in commands and allow shell scripts
+                if (execvp(curr_command->argv[0], curr_command->argv) == -1) {
+                    // If a command fails because it could not be found, print error and set status to 1
+                    // Note: exec() returns only if it fails
+                    perror("execvp");
+                    // A child process must terminate after running a command (successful or failed)
+                    exit(1);
+                }
+            } else {
+                // Parent waits for child to complete
+                int childStatus;
+                waitpid(childPid, &childStatus, 0);
+                // Set status to exit value if child exited normally and... 
+                if (WIFEXITED(childStatus)) {
+                    status = WEXITSTATUS(childStatus);
+				// ... negative signal if terminated!
+                } else if (WIFSIGNALED(childStatus)) {
+                    status = -WTERMSIG(childStatus);
+                }
+            }
         }
 		printf("Command: %s, Args: %d, Input: %s, Output: %s, Bg: %d\n",
                curr_command->argv[0] ? curr_command->argv[0] : "none",
